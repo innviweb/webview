@@ -201,7 +201,7 @@ protected:
 
   noresult set_html_impl(const std::string &html) override {
     webkit_web_view_load_html(WEBKIT_WEB_VIEW(m_webview), html.c_str(),
-                              nullptr);
+                              "http://localhost/");
     return {};
   }
 

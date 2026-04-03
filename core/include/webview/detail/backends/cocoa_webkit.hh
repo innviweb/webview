@@ -137,6 +137,10 @@ public:
       objc::release(m_app_delegate);
       m_app_delegate = nullptr;
     }
+    if (m_menu_bar) {
+      objc::release(m_menu_bar);
+      m_menu_bar = nullptr;
+    }
     if (owns_window()) {
       // Needed for the window to close immediately.
       deplete_run_loop_event_queue();
@@ -229,7 +233,7 @@ protected:
   noresult set_html_impl(const std::string &html) override {
     objc::autoreleasepool arp;
     WKWebView_loadHTMLString(m_webview, NSString_stringWithUTF8String(html),
-                             nullptr);
+                             NSURL_URLWithString(std::string{"http://localhost/"}));
     return {};
   }
   noresult eval_impl(const std::string &js) override {
@@ -436,7 +440,112 @@ private:
       NSApplication_activateIgnoringOtherApps(app, true);
     }
 
+    create_menus();
     window_init_proceed();
+  }
+  void create_menus() {
+    objc::autoreleasepool arp;
+
+    m_menu_bar = objc::msg_send<id>(objc::get_class("NSMenu"), objc::selector("new"));
+    objc::msg_send<void>(
+        m_menu_bar, objc::selector("setTitle:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), ""));
+
+    auto process_info = objc::msg_send<id>(objc::get_class("NSProcessInfo"),
+                                           objc::selector("processInfo"));
+    auto app_name =
+        objc::msg_send<id>(process_info, objc::selector("processName"));
+
+    auto app_menu_item = objc::autorelease(objc::msg_send<id>(
+        objc::msg_send<id>(objc::get_class("NSMenuItem"), objc::selector("alloc")),
+        objc::selector("initWithTitle:action:keyEquivalent:"), app_name,
+        nullptr,
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "")));
+    objc::msg_send<void>(m_menu_bar, objc::selector("addItem:"), app_menu_item);
+
+    auto app_menu = objc::autorelease(
+        objc::msg_send<id>(objc::get_class("NSMenu"), objc::selector("new")));
+    objc::msg_send<void>(app_menu, objc::selector("setTitle:"), app_name);
+
+    auto quit_title = objc::msg_send<id>(
+        objc::get_class("NSString"), objc::selector("stringWithFormat:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "Quit %@"),
+        app_name);
+    auto quit_menu_item = objc::autorelease(objc::msg_send<id>(
+        objc::msg_send<id>(objc::get_class("NSMenuItem"), objc::selector("alloc")),
+        objc::selector("initWithTitle:action:keyEquivalent:"), quit_title,
+        objc::selector("terminate:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "q")));
+    objc::msg_send<void>(app_menu, objc::selector("addItem:"), quit_menu_item);
+    objc::msg_send<void>(app_menu_item, objc::selector("setSubmenu:"), app_menu);
+
+    auto edit_menu_item = objc::autorelease(objc::msg_send<id>(
+        objc::msg_send<id>(objc::get_class("NSMenuItem"), objc::selector("alloc")),
+        objc::selector("initWithTitle:action:keyEquivalent:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "Edit"),
+        nullptr,
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "")));
+
+    auto edit_menu = objc::autorelease(
+        objc::msg_send<id>(objc::get_class("NSMenu"), objc::selector("new")));
+    objc::msg_send<void>(
+        edit_menu, objc::selector("setTitle:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "Edit"));
+    objc::msg_send<void>(
+        edit_menu_item, objc::selector("setSubmenu:"), edit_menu);
+    objc::msg_send<void>(m_menu_bar, objc::selector("addItem:"), edit_menu_item);
+
+    auto cut_menu_item = objc::autorelease(objc::msg_send<id>(
+        objc::msg_send<id>(objc::get_class("NSMenuItem"), objc::selector("alloc")),
+        objc::selector("initWithTitle:action:keyEquivalent:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "Cut"),
+        objc::selector("cut:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "x")));
+    objc::msg_send<void>(edit_menu, objc::selector("addItem:"), cut_menu_item);
+
+    auto copy_menu_item = objc::autorelease(objc::msg_send<id>(
+        objc::msg_send<id>(objc::get_class("NSMenuItem"), objc::selector("alloc")),
+        objc::selector("initWithTitle:action:keyEquivalent:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "Copy"),
+        objc::selector("copy:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "c")));
+    objc::msg_send<void>(edit_menu, objc::selector("addItem:"), copy_menu_item);
+
+    auto paste_menu_item = objc::autorelease(objc::msg_send<id>(
+        objc::msg_send<id>(objc::get_class("NSMenuItem"), objc::selector("alloc")),
+        objc::selector("initWithTitle:action:keyEquivalent:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "Paste"),
+        objc::selector("paste:"),
+        objc::msg_send<id>(
+            objc::get_class("NSString"),
+            objc::selector("stringWithUTF8String:"), "v")));
+    objc::msg_send<void>(edit_menu, objc::selector("addItem:"), paste_menu_item);
+
+    objc::msg_send<void>(m_app, objc::selector("setMainMenu:"), m_menu_bar);
   }
   void on_window_will_close(id /*delegate*/, id /*window*/) {
     // Widget destroyed along with window.
@@ -634,6 +743,7 @@ private:
   id m_widget{};
   id m_webview{};
   id m_manager{};
+  id m_menu_bar{};
   bool m_is_window_shown{};
   bool m_should_exit{};
 };
