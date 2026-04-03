@@ -880,6 +880,30 @@ private:
     }
   }
 
+  result<int> pump_msgloop_impl(int block) override {
+    if (!m_window) {
+      return 0;
+    }
+
+    MSG msg;
+    if (block) {
+      if (GetMessageW(&msg, nullptr, 0, 0) < 1) {
+        return 0;
+      }
+    } else {
+      if (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE) == 0) {
+        return 1;
+      }
+      if (msg.message == WM_QUIT) {
+        return 0;
+      }
+    }
+
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+    return 1;
+  }
+
   // The app is expected to call CoInitializeEx before
   // CreateCoreWebView2EnvironmentWithOptions.
   // Source: https://docs.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/webview2-idl#createcorewebview2environmentwithoptions
