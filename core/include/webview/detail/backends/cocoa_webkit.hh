@@ -606,7 +606,7 @@ private:
   }
 
   result<int> pump_msgloop_impl(int block) override {
-    if (m_should_exit) {
+    if (!m_window || m_should_exit) {
       return 0;
     }
 

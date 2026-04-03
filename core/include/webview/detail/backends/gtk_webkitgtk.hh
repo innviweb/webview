@@ -338,7 +338,7 @@ private:
   }
 
   result<int> pump_msgloop_impl(int block) override {
-    if (m_stop_run_loop) {
+    if (!m_window || m_stop_run_loop) {
       return 0;
     }
 
