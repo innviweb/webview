@@ -544,11 +544,6 @@ private:
             objc::selector("stringWithUTF8String:"), "v")));
     objc::msg_send<void>(edit_menu, objc::selector("addItem:"), paste_menu_item);
 
-    auto separator_menu_item = objc::msg_send<id>(
-        objc::get_class("NSMenuItem"), objc::selector("separatorItem"));
-    objc::msg_send<void>(
-        edit_menu, objc::selector("addItem:"), separator_menu_item);
-
     objc::msg_send<void>(m_app, objc::selector("setMainMenu:"), m_menu_bar);
   }
   void on_window_will_close(id /*delegate*/, id /*window*/) {
