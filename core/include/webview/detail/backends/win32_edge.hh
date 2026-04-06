@@ -507,8 +507,74 @@ protected:
   }
 
 private:
+  struct localized_message_box_text {
+    const wchar_t *title;
+    const wchar_t *body;
+  };
+
+  localized_message_box_text
+  get_missing_webview2_message() const noexcept {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+    case LANG_GREEK:
+      return {L"Απαιτείται το WebView2",
+              L"Αυτή η εφαρμογή απαιτεί το Microsoft WebView2, το οποίο "
+              L"δεν είναι εγκατεστημένο σε αυτό το σύστημα.\n\n"
+              L"Εγκαταστήστε το Microsoft Edge ή το WebView2 Runtime και "
+              L"ανοίξτε ξανά την εφαρμογή."};
+    case LANG_GERMAN:
+      return {L"WebView2 erforderlich",
+              L"Diese Anwendung benötigt Microsoft WebView2, das auf diesem "
+              L"System nicht installiert ist.\n\n"
+              L"Installieren Sie Microsoft Edge oder die WebView2 Runtime "
+              L"und öffnen Sie dann die Anwendung erneut."};
+    case LANG_ITALIAN:
+      return {L"WebView2 richiesto",
+              L"Questa applicazione richiede Microsoft WebView2, che non è "
+              L"installato in questo sistema.\n\n"
+              L"Installa Microsoft Edge o WebView2 Runtime, quindi riapri "
+              L"l'applicazione."};
+    case LANG_SPANISH:
+      return {L"Se requiere WebView2",
+              L"Esta aplicación requiere Microsoft WebView2, que no está "
+              L"instalado en este sistema.\n\n"
+              L"Instala Microsoft Edge o WebView2 Runtime y vuelve a abrir "
+              L"la aplicación."};
+    case LANG_PORTUGUESE:
+      return {L"WebView2 necessário",
+              L"Esta aplicação requer o Microsoft WebView2, que não está "
+              L"instalado neste sistema.\n\n"
+              L"Instale o Microsoft Edge ou o WebView2 Runtime e volte a "
+              L"abrir a aplicação."};
+    case LANG_FRENCH:
+      return {L"WebView2 requis",
+              L"Cette application nécessite Microsoft WebView2, qui n'est "
+              L"pas installé sur ce système.\n\n"
+              L"Installez Microsoft Edge ou le runtime WebView2, puis "
+              L"relancez l'application."};
+    case LANG_CROATIAN:
+      return {L"WebView2 je potreban",
+              L"Ova aplikacija zahtijeva Microsoft WebView2, koji nije "
+              L"instaliran na ovom sustavu.\n\n"
+              L"Instalirajte Microsoft Edge ili WebView2 Runtime, a zatim "
+              L"ponovno pokrenite aplikaciju."};
+    default:
+      return {L"WebView2 Required",
+              L"This application requires Microsoft WebView2, which is not "
+              L"installed on this system.\n\n"
+              L"Please install Microsoft Edge or the WebView2 Runtime and "
+              L"then reopen the application."};
+    }
+  }
+
+  void show_missing_webview2_message() const noexcept {
+    auto message = get_missing_webview2_message();
+    MessageBoxW(nullptr, message.body, message.title,
+                MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+  }
+
   void window_init(void *window) {
     if (!is_webview2_available()) {
+      show_missing_webview2_message();
       throw exception{WEBVIEW_ERROR_MISSING_DEPENDENCY,
                       "WebView2 is unavailable"};
     }
