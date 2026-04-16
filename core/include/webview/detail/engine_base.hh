@@ -212,69 +212,89 @@ protected:
   std::string create_init_script(const std::string &post_fn) {
     auto js = std::string{} + "(function() {\n\
   'use strict';\n\
+  const promises = Object.create(null);\n\
+  const state = {\n\
+    decodeError: (err) => err,\n\
+  };\n\
+  const api = Object.freeze({\n\
+    setDecodeError(fn) {\n\
+      if (typeof fn !== 'function') {\n\
+        throw new TypeError('decodeError must be a function');\n\
+      }\n\
+      state.decodeError = fn;\n\
+    },\n\
+  });\n\
   function generateId() {\n\
-    var crypto = window.crypto || window.msCrypto;\n\
-    var bytes = new Uint8Array(16);\n\
+    const crypto = window.crypto;\n\
+    const bytes = new Uint8Array(16);\n\
     crypto.getRandomValues(bytes);\n\
     return Array.prototype.slice.call(bytes).map(function(n) {\n\
-      var s = n.toString(16);\n\
-      return ((s.length % 2) == 1 ? '0' : '') + s;\n\
+      return n.toString(16).padStart(2, '0');\n\
     }).join('');\n\
   }\n\
-  var Webview = (function() {\n\
-    var _promises = {};\n\
-    function Webview_() {}\n\
-    Webview_.prototype.post = function(message) {\n\
+  const bridge = Object.freeze({\n\
+    get api() {\n\
+      return api;\n\
+    },\n\
+    post(message) {\n\
       return (" +
               post_fn + ")(message);\n\
-    };\n\
-    Webview_.prototype.call = function(method) {\n\
-      var _id = generateId();\n\
-      var _params = Array.prototype.slice.call(arguments, 1);\n\
-      var promise = new Promise(function(resolve, reject) {\n\
-        _promises[_id] = { resolve, reject };\n\
+    },\n\
+    call(method, ...params) {\n\
+      const id = generateId();\n\
+      const promise = new Promise(function(resolve, reject) {\n\
+        promises[id] = { resolve, reject };\n\
       });\n\
-      this.post(JSON.stringify({\n\
-        id: _id,\n\
-        method: method,\n\
-        params: _params\n\
+      bridge.post(JSON.stringify({\n\
+        id,\n\
+        method,\n\
+        params\n\
       }));\n\
       return promise;\n\
-    };\n\
-    Webview_.prototype.onReply = function(id, status, result) {\n\
-      var promise = _promises[id];\n\
-      if (result !== undefined) {\n\
-        try {\n\
-          result = JSON.parse(result);\n\
-        } catch (e) {\n\
-          promise.reject(new Error(\"Failed to parse binding result as JSON\"));\n\
+    },\n\
+    onReply(id, status, result) {\n\
+      const promise = promises[id];\n\
+      if (!promise) {\n\
+        return;\n\
+      }\n\
+      try {\n\
+        if (result !== undefined) {\n\
+          try {\n\
+            result = JSON.parse(result);\n\
+          } catch (cause) {\n\
+            promise.reject(new Error(\"Failed to parse binding result as JSON\", { cause }));\n\
+            return;\n\
+          }\n\
+        }\n\
+        if (status === 0) {\n\
+          promise.resolve(result);\n\
           return;\n\
         }\n\
-      }\n\
-      if (status === 0) {\n\
-        promise.resolve(result);\n\
-      } else {\n\
+        try {\n\
+          result = state.decodeError(result);\n\
+        } catch (cause) {\n\
+          promise.reject(new Error(\"Failed to decode binding error\", { cause }));\n\
+          return;\n\
+        }\n\
         promise.reject(result);\n\
+      } finally {\n\
+        delete promises[id];\n\
       }\n\
-    };\n\
-    Webview_.prototype.onBind = function(name) {\n\
-      if (window.hasOwnProperty(name)) {\n\
+    },\n\
+    onBind(name) {\n\
+      if (Object.prototype.hasOwnProperty.call(window, name)) {\n\
         throw new Error('Property \"' + name + '\" already exists');\n\
       }\n\
-      window[name] = (function() {\n\
-        var params = [name].concat(Array.prototype.slice.call(arguments));\n\
-        return Webview_.prototype.call.apply(this, params);\n\
-      }).bind(this);\n\
-    };\n\
-    Webview_.prototype.onUnbind = function(name) {\n\
-      if (!window.hasOwnProperty(name)) {\n\
+      window[name] = (...args) => bridge.call(name, ...args);\n\
+    },\n\
+    onUnbind(name) {\n\
+      if (!Object.prototype.hasOwnProperty.call(window, name)) {\n\
         throw new Error('Property \"' + name + '\" does not exist');\n\
       }\n\
       delete window[name];\n\
-    };\n\
-    return Webview_;\n\
-  })();\n\
-  window.__webview__ = new Webview();\n\
+    },\n\
+  });\n\
+  window.__webview__ = bridge;\n\
 })()";
     return js;
   }
