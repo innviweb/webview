@@ -225,7 +225,7 @@ protected:
     },\n\
   });\n\
   function generateId() {\n\
-    const crypto = window.crypto || window.msCrypto;\n\
+    const crypto = window.crypto;\n\
     const bytes = new Uint8Array(16);\n\
     crypto.getRandomValues(bytes);\n\
     return Array.prototype.slice.call(bytes).map(function(n) {\n\
@@ -258,25 +258,25 @@ protected:
         return;\n\
       }\n\
       try {\n\
-      if (result !== undefined) {\n\
-        try {\n\
-          result = JSON.parse(result);\n\
-        } catch (cause) {\n\
-          promise.reject(new Error(\"Failed to parse binding result as JSON\", { cause }));\n\
+        if (result !== undefined) {\n\
+          try {\n\
+            result = JSON.parse(result);\n\
+          } catch (cause) {\n\
+            promise.reject(new Error(\"Failed to parse binding result as JSON\", { cause }));\n\
+            return;\n\
+          }\n\
+        }\n\
+        if (status === 0) {\n\
+          promise.resolve(result);\n\
           return;\n\
         }\n\
-      }\n\
-      if (status === 0) {\n\
-        promise.resolve(result);\n\
-        return;\n\
-      }\n\
-      try {\n\
-        result = state.decodeError(result);\n\
-      } catch (cause) {\n\
-        promise.reject(new Error(\"Failed to decode binding error\", { cause }));\n\
-        return;\n\
-      }\n\
-      promise.reject(result);\n\
+        try {\n\
+          result = state.decodeError(result);\n\
+        } catch (cause) {\n\
+          promise.reject(new Error(\"Failed to decode binding error\", { cause }));\n\
+          return;\n\
+        }\n\
+        promise.reject(result);\n\
       } finally {\n\
         delete promises[id];\n\
       }\n\
