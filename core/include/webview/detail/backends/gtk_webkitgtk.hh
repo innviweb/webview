@@ -201,7 +201,7 @@ protected:
 
   noresult set_html_impl(const std::string &html) override {
     webkit_web_view_load_html(WEBKIT_WEB_VIEW(m_webview), html.c_str(),
-                              nullptr);
+                              "http://localhost/");
     return {};
   }
 
@@ -335,6 +335,15 @@ private:
     while (fn()) {
       g_main_context_iteration(nullptr, TRUE);
     }
+  }
+
+  result<int> pump_msgloop_impl(int block) override {
+    if (!m_window || m_stop_run_loop) {
+      return 0;
+    }
+
+    g_main_context_iteration(nullptr, block);
+    return 1;
   }
 
   GtkWidget *m_window{};
