@@ -212,10 +212,61 @@ protected:
   std::string create_init_script(const std::string &post_fn) {
     auto js = std::string{} + "(function() {\n\
   'use strict';\n\
-  const promises = Object.create(null);\n\
+  const pending = new Map();\n\
   const state = {\n\
     decodeError: (err) => err,\n\
+    randomUUID: window.crypto?.randomUUID?.bind(window.crypto),\n\
+    withResolvers: Promise?.withResolvers?.bind(Promise),\n\
   };\n\
+  if (typeof state.randomUUID !== 'function') {\n\
+    state.randomUUID = () => {\n\
+      const bytes = new Uint8Array(16);\n\
+      window.crypto.getRandomValues(bytes);\n\
+      return Array.prototype.slice.call(bytes).map(function(n) {\n\
+        return n.toString(16).padStart(2, '0');\n\
+      }).join('');\n\
+    };\n\
+  }\n\
+  if (typeof state.withResolvers !== 'function') {\n\
+    state.withResolvers = function() {\n\
+      let resolve, reject;\n\
+      const promise = new Promise(function(_resolve, _reject) {\n\
+        resolve = _resolve;\n\
+        reject = _reject;\n\
+      });\n\
+      return { promise, resolve, reject };\n\
+    };\n\
+  }\n\
+  function defer() {\n\
+    try {\n\
+      const id = state.randomUUID();\n\
+      const deferred = state.withResolvers();\n\
+      const { promise } = deferred;\n\
+      pending.set(id, deferred);\n\
+      promise.then(() => pending.delete(id), () => pending.delete(id));\n\
+      return Object.assign(deferred, { id });\n\
+    } catch (cause) {\n\
+      if (cause instanceof Error) return cause;\n\
+      return new Error(\"Failed to create deferred promise\", { cause });\n\
+    }\n\
+  }\n\
+  function dispatch(detail) {\n\
+    window.dispatchEvent(new CustomEvent('webview:error', { detail }));\n\
+  }\n\
+  function fail(detail) {\n\
+    if (!(detail instanceof Error)) {\n\
+      detail = new Error(\"Unknown error\", { cause: detail });\n\
+    }\n\
+    setTimeout(dispatch, 0, detail);\n\
+    return detail;\n\
+  }\n\
+  function encode(value) {\n\
+    try {\n\
+      return JSON.stringify(value);\n\
+    } catch (cause) {\n\
+      throw new Error(\"Webview bridge encode failed\", { cause });\n\
+    }\n\
+  }\n\
   const api = Object.freeze({\n\
     setDecodeError(fn) {\n\
       if (typeof fn !== 'function') {\n\
@@ -224,37 +275,31 @@ protected:
       state.decodeError = fn;\n\
     },\n\
   });\n\
-  function generateId() {\n\
-    const crypto = window.crypto;\n\
-    const bytes = new Uint8Array(16);\n\
-    crypto.getRandomValues(bytes);\n\
-    return Array.prototype.slice.call(bytes).map(function(n) {\n\
-      return n.toString(16).padStart(2, '0');\n\
-    }).join('');\n\
-  }\n\
   const bridge = Object.freeze({\n\
     get api() {\n\
       return api;\n\
     },\n\
     post(message) {\n\
-      return (" +
+      try {\n\
+        return (" +
               post_fn + ")(message);\n\
+      } catch (cause) {\n\
+        throw new Error(\"Webview bridge post failed\", { cause });\n\
+      }\n\
     },\n\
     call(method, ...params) {\n\
-      const id = generateId();\n\
-      const promise = new Promise(function(resolve, reject) {\n\
-        promises[id] = { resolve, reject };\n\
-      });\n\
-      bridge.post(JSON.stringify({\n\
-        id,\n\
-        method,\n\
-        params\n\
-      }));\n\
-      return promise;\n\
+      const deferred = defer();\n\
+      if (deferred instanceof Error) return Promise.reject(fail(deferred));\n\
+      try {\n\
+        bridge.post(encode({ id: deferred.id, method, params }));\n\
+      } catch (cause) {\n\
+        deferred.reject(fail(cause));\n\
+      }\n\
+      return deferred.promise;\n\
     },\n\
     onReply(id, status, result) {\n\
-      const promise = promises[id];\n\
-      if (!promise) {\n\
+      const deferred = pending.get(id);\n\
+      if (!deferred) {\n\
         return;\n\
       }\n\
       try {\n\
@@ -262,36 +307,45 @@ protected:
           try {\n\
             result = JSON.parse(result);\n\
           } catch (cause) {\n\
-            promise.reject(new Error(\"Failed to parse binding result as JSON\", { cause }));\n\
-            return;\n\
+            throw new Error(\"Failed to parse results\", {\n\
+              cause: { error: cause, suppressed: result },\n\
+            });\n\
           }\n\
         }\n\
         if (status === 0) {\n\
-          promise.resolve(result);\n\
-          return;\n\
+          deferred.resolve(result);\n\
+        } else {\n\
+          try {\n\
+            deferred.reject(state.decodeError(result));\n\
+          } catch (cause) {\n\
+            throw new Error(\"Failed to decode error\", {\n\
+              cause: { error: cause, suppressed: result },\n\
+            });\n\
+          }\n\
         }\n\
-        try {\n\
-          result = state.decodeError(result);\n\
-        } catch (cause) {\n\
-          promise.reject(new Error(\"Failed to decode binding error\", { cause }));\n\
-          return;\n\
-        }\n\
-        promise.reject(result);\n\
-      } finally {\n\
-        delete promises[id];\n\
+      } catch (cause) {\n\
+        deferred.reject(fail(cause));\n\
       }\n\
     },\n\
     onBind(name) {\n\
-      if (Object.prototype.hasOwnProperty.call(window, name)) {\n\
-        throw new Error('Property \"' + name + '\" already exists');\n\
+      try {\n\
+        if (Object.prototype.hasOwnProperty.call(window, name)) {\n\
+          throw new Error('Property \"' + name + '\" already exists');\n\
+        }\n\
+        window[name] = (...args) => bridge.call(name, ...args);\n\
+      } catch (cause) {\n\
+        throw fail(cause);\n\
       }\n\
-      window[name] = (...args) => bridge.call(name, ...args);\n\
     },\n\
     onUnbind(name) {\n\
-      if (!Object.prototype.hasOwnProperty.call(window, name)) {\n\
-        throw new Error('Property \"' + name + '\" does not exist');\n\
+      try {\n\
+        if (!Object.prototype.hasOwnProperty.call(window, name)) {\n\
+          throw new Error('Property \"' + name + '\" does not exist');\n\
+        }\n\
+        delete window[name];\n\
+      } catch (cause) {\n\
+        throw fail(cause);\n\
       }\n\
-      delete window[name];\n\
     },\n\
   });\n\
   window.__webview__ = bridge;\n\
@@ -317,7 +371,13 @@ protected:
   var methods = " +
               js_names + ";\n\
   methods.forEach(function(name) {\n\
-    window.__webview__.onBind(name);\n\
+    try {\n\
+      window.__webview__.onBind(name);\n\
+    } catch (error) {\n\
+      setTimeout(function() {\n\
+        throw error;\n\
+      }, 0);\n\
+    }\n\
   });\n\
 })()";
     return js;
