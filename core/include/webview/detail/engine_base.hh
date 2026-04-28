@@ -317,7 +317,13 @@ protected:
   var methods = " +
               js_names + ";\n\
   methods.forEach(function(name) {\n\
-    window.__webview__.onBind(name);\n\
+    try {\n\
+      window.__webview__.onBind(name);\n\
+    } catch (error) {\n\
+      setTimeout(function() {\n\
+        throw error;\n\
+      }, 0);\n\
+    }\n\
   });\n\
 })()";
     return js;
