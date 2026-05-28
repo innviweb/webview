@@ -214,14 +214,14 @@ protected:
   'use strict';\n\
   const promises = Object.create(null);\n\
   const state = {\n\
-    decodeError: (err) => err,\n\
+    reviver: undefined,\n\
   };\n\
   const api = Object.freeze({\n\
-    setDecodeError(fn) {\n\
+    setReviver(fn) {\n\
       if (typeof fn !== 'function') {\n\
-        throw new TypeError('decodeError must be a function');\n\
+        throw new TypeError('reviver must be a function');\n\
       }\n\
-      state.decodeError = fn;\n\
+      state.reviver = fn;\n\
     },\n\
   });\n\
   function generateId() {\n\
@@ -260,7 +260,7 @@ protected:
       try {\n\
         if (result !== undefined) {\n\
           try {\n\
-            result = JSON.parse(result);\n\
+            result = JSON.parse(result, state.reviver);\n\
           } catch (cause) {\n\
             promise.reject(new Error(\"Failed to parse binding result as JSON\", { cause }));\n\
             return;\n\
@@ -268,12 +268,6 @@ protected:
         }\n\
         if (status === 0) {\n\
           promise.resolve(result);\n\
-          return;\n\
-        }\n\
-        try {\n\
-          result = state.decodeError(result);\n\
-        } catch (cause) {\n\
-          promise.reject(new Error(\"Failed to decode binding error\", { cause }));\n\
           return;\n\
         }\n\
         promise.reject(result);\n\
