@@ -214,7 +214,7 @@ protected:
   'use strict';\n\
   const pending = new Map();\n\
   const state = {\n\
-    reviver: undefined,\n\
+    decode: undefined,\n\
     randomUUID: window.crypto?.randomUUID?.bind(window.crypto),\n\
     withResolvers: Promise?.withResolvers?.bind(Promise),\n\
   };\n\
@@ -268,11 +268,11 @@ protected:
     }\n\
   }\n\
   const api = Object.freeze({\n\
-    setReviver(fn) {\n\
+    setDecode(fn) {\n\
       if (typeof fn !== 'function') {\n\
-        throw new TypeError('reviver must be a function');\n\
+        throw new TypeError('decode must be a function');\n\
       }\n\
-      state.reviver = fn;\n\
+      state.decode = fn;\n\
     },\n\
   });\n\
   const bridge = Object.freeze({\n\
@@ -305,9 +305,9 @@ protected:
       try {\n\
         if (result !== undefined) {\n\
           try {\n\
-            result = JSON.parse(result, state.reviver);\n\
+            result = state.decode ? state.decode(result) : JSON.parse(result);\n\
           } catch (cause) {\n\
-            throw new Error(\"Failed to parse results\", {\n\
+            throw new Error(\"Failed to decode binding results\", {\n\
               cause: { error: cause, suppressed: result },\n\
             });\n\
           }\n\
